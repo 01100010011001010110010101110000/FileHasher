@@ -73,15 +73,18 @@ public class FileHasher {
 
   static class HashFiles extends DoFn<FileIO.ReadableFile, HashMap<String, String>> {
     @ProcessElement
-    public void processElement(@Element FileIO.ReadableFile file, OutputReceiver<HashMap<String, String>> receiver) {
+    public void processElement(ProcessContext context) {
+      FileIO.ReadableFile file = context.element();
       try {
         LOG.info("Hashing {}", file.getMetadata().resourceId().getFilename());
+
         MessageDigest digest = DigestUtils.getSha256Digest();
         String hash = FileUtils.fileDigest(digest, file);
+
         HashMap<String, String> result = new HashMap<>();
         result.put("path", fileToPath(file));
         result.put("hash", hash);
-        receiver.output(result);
+        context.output(result);
       } catch (IOException exception) {
         LOG.error("Error hashing {}: {}", file.getMetadata().resourceId().getFilename(),
             exception.getLocalizedMessage());
@@ -91,11 +94,12 @@ public class FileHasher {
 
   static class ToJson extends DoFn<HashMap<String, String>, String> {
     @ProcessElement
-    public void processElement(@Element HashMap<String, String> map, OutputReceiver<String> receiver) {
+    public void processElement(ProcessContext context) {
       try {
+        HashMap<String, String> map = context.element();
         ObjectMapper mapper = new ObjectMapper();
         String serialized = mapper.writeValueAsString(map);
-        receiver.output(serialized);
+        context.output(serialized);
       } catch (JsonProcessingException exception) {
         LOG.error("Error processing JSON: {}", exception.getLocalizedMessage());
       }
