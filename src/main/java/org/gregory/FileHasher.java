@@ -19,6 +19,7 @@ package org.gregory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jdk.management.resource.ResourceId;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.FileIO;
 import org.apache.beam.sdk.io.TextIO;
@@ -34,23 +35,6 @@ import org.gregory.utils.*;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.HashMap;
-
-/**
- * A starter example for writing Beam programs.
- *
- * <p>The example takes two strings, converts them to their upper-case
- * representation and logs them.
- *
- * <p>To run this starter example locally using DirectRunner, just
- * execute it without any additional parameters from your favorite development
- * environment.
- *
- * <p>To run this starter example using managed resource in Google Cloud
- * Platform, you should specify the following command-line options:
- * --project=<YOUR_PROJECT_ID>
- * --stagingLocation=<STAGING_LOCATION_IN_CLOUD_STORAGE>
- * --runner=DataflowRunner
- */
 
 public class FileHasher {
   public interface FileHasherOptions extends PipelineOptions {
@@ -74,17 +58,21 @@ public class FileHasher {
   static class HashFiles extends DoFn<FileIO.ReadableFile, HashMap<String, String>> {
     @ProcessElement
     public void processElement(ProcessContext context) {
+      // Fetch the file from context
       FileIO.ReadableFile file = context.element();
       try {
         LOG.info("Hashing {}", file.getMetadata().resourceId().getFilename());
 
+        // Compute the file's digest
         MessageDigest digest = DigestUtils.getSha256Digest();
         String hash = FileUtils.fileDigest(digest, file);
 
+        // Construct HashMap containing the file's path and hash
         HashMap<String, String> result = new HashMap<>();
         result.put("path", fileToPath(file));
         result.put("hash", hash);
         context.output(result);
+
       } catch (IOException exception) {
         LOG.error("Error hashing {}: {}", file.getMetadata().resourceId().getFilename(),
             exception.getLocalizedMessage());
@@ -96,10 +84,12 @@ public class FileHasher {
     @ProcessElement
     public void processElement(ProcessContext context) {
       try {
+        // Serialize the map to a JSON object
         HashMap<String, String> map = context.element();
         ObjectMapper mapper = new ObjectMapper();
         String serialized = mapper.writeValueAsString(map);
         context.output(serialized);
+
       } catch (JsonProcessingException exception) {
         LOG.error("Error processing JSON: {}", exception.getLocalizedMessage());
       }
@@ -118,12 +108,12 @@ public class FileHasher {
     Pipeline p = Pipeline.create(options);
     FileSystems.setDefaultPipelineOptions(options);
 
-    p.apply("Read files from source", FileIO.match().filepattern(options.getInputFile()))
-        .apply(FileIO.readMatches())
-        .apply(ParDo.of(new HashFiles()))
-        .apply(ParDo.of(new ToJson()))
-        .apply(TextIO.write().to(options.getOutput())
-            .withoutSharding() // All write operations are conducted on a single worker, yields a single file
+    p.apply("Search for matching files in source", FileIO.match().filepattern(options.getInputFile()))
+        .apply("Read matching files", FileIO.readMatches())
+        .apply("Hash each file", ParDo.of(new HashFiles()))
+        .apply("Serialize path and hash to JSON", ParDo.of(new ToJson()))
+        .apply("Write results to a single JSON array", TextIO.write().to(options.getOutput())
+            .withoutSharding() // Conducts all write operations on a single worker, yielding a single file
             .withHeader("[")
             .withFooter("]"));
     p.run();
