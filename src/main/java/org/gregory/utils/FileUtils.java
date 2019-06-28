@@ -2,7 +2,7 @@ package org.gregory.utils;
 
 import org.apache.beam.sdk.io.FileIO;
 
-import java.io.*;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.security.MessageDigest;

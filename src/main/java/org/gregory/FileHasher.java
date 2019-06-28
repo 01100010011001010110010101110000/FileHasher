@@ -19,42 +19,51 @@ package org.gregory;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jdk.management.resource.ResourceId;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.FileIO;
+import org.apache.beam.sdk.io.FileSystems;
 import org.apache.beam.sdk.io.TextIO;
 import org.apache.beam.sdk.options.*;
-import org.apache.beam.sdk.transforms.*;
-import org.apache.beam.sdk.io.FileSystems;
+import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.gregory.utils.FailureObject;
+import org.gregory.utils.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.gregory.utils.*;
-
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.HashMap;
 
 public class FileHasher {
   public interface FileHasherOptions extends PipelineOptions {
-    @Description("Path of the file to read")
-    @Default.String("gs://censys-interviews/data-engineer/testdata.zip")
+    @Description("Input file glob")
+    @Default.String("./input/*")
     String getInputFile();
 
     void setInputFile(String value);
 
-    /**
-     * Specifies where to write the output
-     */
-    @Description("Path of the file to write to")
-    @Default.String("./manifest.json")
+    @Description("Path of the output directory")
+    @Default.String("./output")
     @Validation.Required
-    String getOutput();
+    String getOutputDirectory();
 
-    void setOutput(String value);
+    void setOutputDirectory(String value);
+
+    @Description("Whether to output to a single file")
+    @Default.Boolean(true)
+    Boolean getOutputSingleFile();
+
+    void setOutputSingleFile(Boolean value);
   }
 
+  /**
+   * Converts a {@code FileIO.ReadableFile} into a {@code HashMap<String, String>} where the
+   * key-value pairs of {@code {"path": <fully qualified file path>, "hash": <file's SHA-256 hash>}}
+   */
   static class HashFiles extends DoFn<FileIO.ReadableFile, HashMap<String, String>> {
     @ProcessElement
     public void processElement(ProcessContext context) {
@@ -81,6 +90,9 @@ public class FileHasher {
     }
   }
 
+  /**
+   * Converts a {@code HashMap<String, String>} to an equivalent JSON string
+   */
   static class ToJson extends DoFn<HashMap<String, String>, String> {
     @ProcessElement
     public void processElement(ProcessContext context) {
@@ -106,18 +118,33 @@ public class FileHasher {
   }
 
   public static void main(String[] args) {
-    FileHasherOptions options = PipelineOptionsFactory.fromArgs(args).withValidation().as(FileHasherOptions.class);
+    FileHasherOptions options = PipelineOptionsFactory.fromArgs(args)
+        .withValidation()
+        .as(FileHasherOptions.class);
     Pipeline p = Pipeline.create(options);
     FileSystems.setDefaultPipelineOptions(options);
 
-    p.apply("Search for matching files in source", FileIO.match().filepattern(options.getInputFile()))
+    // Configure output options
+    Boolean singleFileOutput = options.getOutputSingleFile();
+    Path outputPath;
+    TextIO.Write jsonArrayWriter = TextIO.write().withHeader("[").withFooter("]");
+    if (singleFileOutput) {
+      outputPath = Paths.get(options.getOutputDirectory(), "manifest.json");
+      jsonArrayWriter = jsonArrayWriter
+          .to(outputPath.toString())
+          .withoutSharding();
+    } else {
+      outputPath = Paths.get(options.getOutputDirectory());
+      jsonArrayWriter = jsonArrayWriter
+          .to(outputPath.toString());
+    }
+
+    Path inputPath = Paths.get(options.getInputFile());
+    p.apply("Search for matching files in source", FileIO.match().filepattern(inputPath.toString()))
         .apply("Read matching files", FileIO.readMatches())
         .apply("Hash each file", ParDo.of(new HashFiles()))
         .apply("Serialize path and hash to JSON", ParDo.of(new ToJson()))
-        .apply("Write results to a single JSON array", TextIO.write().to(options.getOutput())
-            .withoutSharding() // Conducts all write operations on a single worker, yielding a single file
-            .withHeader("[")
-            .withFooter("]"));
+        .apply("Write results to a single JSON array", jsonArrayWriter);
     p.run();
   }
 }
