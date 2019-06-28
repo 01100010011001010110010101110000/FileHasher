@@ -74,8 +74,9 @@ public class FileHasher {
         context.output(result);
 
       } catch (IOException exception) {
-        LOG.error("Error hashing {}: {}", file.getMetadata().resourceId().getFilename(),
-            exception.getLocalizedMessage());
+        FailureObject failure = new FailureObject(file, exception);
+        LOG.error("Error hashing {}:\n{}", fileToPath(file),
+            failure.toString());
       }
     }
   }
@@ -83,15 +84,16 @@ public class FileHasher {
   static class ToJson extends DoFn<HashMap<String, String>, String> {
     @ProcessElement
     public void processElement(ProcessContext context) {
+      HashMap<String, String> map = context.element();
+      ObjectMapper mapper = new ObjectMapper();
       try {
         // Serialize the map to a JSON object
-        HashMap<String, String> map = context.element();
-        ObjectMapper mapper = new ObjectMapper();
         String serialized = mapper.writeValueAsString(map);
         context.output(serialized);
 
       } catch (JsonProcessingException exception) {
-        LOG.error("Error processing JSON: {}", exception.getLocalizedMessage());
+        FailureObject failure = new FailureObject(map, exception);
+        LOG.error("Error processing JSON\n{}", failure.toString());
       }
     }
   }
