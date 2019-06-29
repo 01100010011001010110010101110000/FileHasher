@@ -20,7 +20,7 @@ public class FileUtilsTest {
   public TestPipeline p = TestPipeline.create();
 
   private static MessageDigest digest = DigestUtils.getSha256Digest();
-  private static String testFile = Paths.get("resources/hashTest.txt").toAbsolutePath().toString();
+  private static String testFile = Paths.get("src/test/resources/hashTest.txt").toAbsolutePath().toString();
   private static String testFileHash = "dca69306dac30c407ce5a474f655ab0ac72713720b28b3b4ae8b9217bba57f8f";
 
   private static class DigestTester extends DoFn<FileIO.ReadableFile, String> {
