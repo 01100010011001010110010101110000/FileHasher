@@ -70,7 +70,7 @@ public class FileHasher {
       // Fetch the file from context
       FileIO.ReadableFile file = context.element();
       try {
-        LOG.info("Hashing {}", file.getMetadata().resourceId().getFilename());
+        LOG.info("Hashing {}", fileToPath(file));
 
         // Compute the file's digest
         MessageDigest digest = DigestUtils.getSha256Digest();
