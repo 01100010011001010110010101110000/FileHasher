@@ -8,8 +8,8 @@ qualified paths and hashes
 
 | Option | Effect | Default |
 |---|---|---|
-| `--outputDirectory=output/suboutput/` | The directory where the JSON output will be placed | `./output` |
-| `--inputFile=/Users/tgregory/Downloads/testdata/*` | The file glob to use to select files | `./input/*` |
+| `--outputDirectory` | The directory where the JSON output will be placed | `./output` |
+| `--inputFile` | The file glob to use to select files | `./input/*` |
 | `--outputSingleFile` | If true, write all JSON output to a single file containing a single array; if false, write multiple files each containing a single array  | `true`
 
 ## Testing instructions
